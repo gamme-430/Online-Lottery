@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>kD Lottery Pro - Ultimate</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background-color: #1a1e35; color: white; margin: 0; padding: 10px; overflow-x: hidden; }
+        .stats-bar { display: flex; justify-content: space-around; background: #16213e; padding: 12px; border-radius: 12px; border: 1px solid #3b82f6; position: relative; }
+        .stat-item { font-size: 13px; font-weight: bold; color: #ffcc00; }
+        
+        /* Admin Toggle Button */
+        .admin-gear { position: absolute; right: 5px; top: 5px; cursor: pointer; font-size: 18px; opacity: 0.5; }
+
+        .live-info { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; padding: 0 10px; }
+        .live-prize { color: #4ade80; font-weight: bold; font-size: 18px; }
+        .live-timer { color: #ff4d4d; font-weight: bold; font-size: 20px; }
+
+        #countdownBanner { display: none; background: #e94560; color: white; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-weight: bold; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+
+        .btn-action { background: #3b82f6; color: white; border: none; padding: 12px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 8px; }
+        .btn-bank { background: #28a745; }
+
+        /* Admin Panel Style */
+        #adminPanel { display: none; background: #0f172a; padding: 15px; border: 2px solid #ffcc00; border-radius: 12px; text-align: left; margin: 15px 0; font-size: 14px; }
+        .admin-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #1e293b; padding-bottom: 5px; }
+        .admin-row button { background: #3b82f6; color: white; border: none; padding: 5px 10px; border-radius: 4px; }
+
+        /* Modals */
+        #depositModal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); }
+        .modal-content { background: #16213e; margin: 20% auto; padding: 20px; border-radius: 15px; width: 85%; border: 1px solid #3b82f6; }
+        .copy-box { background: #1a1e35; padding: 12px; margin: 10px 0; border-radius: 8px; cursor: pointer; border: 1px dashed #4ade80; text-align: left; font-size: 13px; }
+
+        .wheel-container { position: relative; width: 280px; margin: 20px auto; }
+        #pointer { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); border-top: 30px solid #ff0000; border-left: 18px solid transparent; border-right: 18px solid transparent; z-index: 100; }
+        canvas { border: 6px solid #fff; border-radius: 50%; background: white; transition: transform 5s cubic-bezier(0.15, 0, 0.15, 1); width: 100%; }
+        
+        .keypad-container { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 15px auto; }
+        .key-btn { background: #16213e; color: white; border: 1px solid #0f3460; padding: 15px 0; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .key-btn.sold { background: #28a745; border-color: #fff; }
+        .key-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+    <audio id="spinSound" src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3" preload="auto"></audio>
+    <audio id="winSound" src="https://www.soundjay.com/misc/sounds/success-fanfare-trumpets-10.mp3" preload="auto"></audio>
+
+    <div class="stats-bar">
+        <div class="stat-item">💰 WALLET: <span id="walletDisp">0</span></div>
+        <div class="stat-item">🏆 PRIZE: <span id="prizeDisp">0</span></div>
+        <div class="admin-gear" onclick="toggleAdmin()">⚙️</div>
+    </div>
+
+    <div id="adminPanel">
+        <h3 style="color:#ffcc00; margin-top:0;">🛠 Admin Panel</h3>
+        <div class="admin-row">
+            <span>Range (Wheel): <b id="rangeVal">10</b></span>
+            <div><button onclick="changeRange(-1)">-</button> <button onclick="changeRange(1)">+</button></div>
+        </div>
+        <div class="admin-row">
+            <span>Min Bet: <b id="betVal">200</b></span>
+            <div><button onclick="changeBet(-50)">-</button> <button onclick="changeBet(50)">+</button></div>
+        </div>
+        <div class="admin-row">
+            <span>Commission: <b id="commVal">10</b>%</span>
+            <div><button onclick="changeComm(-5)">-</button> <button onclick="changeComm(5)">+</button></div>
+        </div>
+        <div class="admin-row">
+            <span>Status:</span>
+            <div>
+                <button onclick="controlGame('PLAY')" style="background:#28a745;">PLAY</button>
+                <button onclick="controlGame('STOP')" style="background:#dc3545;">STOP</button>
+            </div>
+        </div>
+        <div class="admin-row">
+            <input type="number" id="schedMin" placeholder="Mins" style="width:50px;">
+            <button onclick="setGlobalCountdown()">SET COUNTDOWN</button>
+        </div>
+    </div>
+
+    <div id="countdownBanner">NEXT GAME STARTS IN: <span id="globalTimer">00:00</span></div>
+
+    <div class="live-info">
+        <div class="live-prize">🎁 NEXT WIN: <span id="nextPrizeDisp">0</span> ETB</div>
+        <div id="betTimer" class="live-timer">READY</div>
+    </div>
+
+    <button class="btn-action btn-bank" onclick="openDeposit()">🏦 BANK & DEPOSIT</button>
+    <button class="btn-action" onclick="tg.openTelegramLink('https://t.me/Mylottorey')">📩 CONTACT ADMIN</button>
+
+    <div id="depositModal">
+        <div class="modal-content">
+            <h3>🏦 Payment Info</h3>
+            <div class="copy-box" onclick="copyText('01320030003101')">Awash: 01320030003101 📋</div>
+            <div class="copy-box" onclick="copyText('1000194059799')">CBE: 1000194059799 📋</div>
+            <div class="copy-box" onclick="copyText('0989019600')">Telebirr: 0989019600 📋</div>
+            <p><b>Gemechu Tadesse</b></p>
+            <button class="btn-action" onclick="closeDeposit()">CLOSE</button>
+        </div>
+    </div>
+
+    <div class="wheel-container">
+        <div id="pointer"></div>
+        <canvas id="wheel" width="400" height="400"></canvas>
+    </div>
+
+    <div id="keypad" class="keypad-container"></div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        // Game Settings
+        let userWallet = 2000, range = 10, minBet = 200, commission = 0.10;
+        let soldNumbers = [], currentRot = 0, isSpinning = false, gameActive = true;
+        let betTimerInterval, countdownInterval;
+
+        function updateUI() {
+            document.getElementById('walletDisp').innerText = userWallet.toFixed(0);
+            const p = (soldNumbers.length * minBet * (1 - commission)).toFixed(0);
+            document.getElementById('prizeDisp').innerText = p;
+            document.getElementById('nextPrizeDisp').innerText = p;
+        }
+
+        // --- Admin Functions ---
+        function toggleAdmin() {
+            const p = document.getElementById('adminPanel');
+            p.style.display = p.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function changeRange(v) { range = Math.max(5, range + v); document.getElementById('rangeVal').innerText = range; drawWheel(); createKeypad(); }
+        function changeBet(v) { minBet = Math.max(50, minBet + v); document.getElementById('betVal').innerText = minBet; updateUI(); }
+        function changeComm(v) { commission = Math.max(0, (commission*100 + v))/100; document.getElementById('commVal').innerText = (commission*100).toFixed(0); updateUI(); }
+        
+        function controlGame(s) {
+            gameActive = (s === 'PLAY');
+            isSpinning = !gameActive;
+            createKeypad();
+            tg.showAlert("Game is now: " + s);
+        }
+
+        function setGlobalCountdown() {
+            let sec = document.getElementById('schedMin').value * 60;
+            if(!sec) return;
+            document.getElementById('countdownBanner').style.display = 'block';
+            controlGame('STOP');
+            clearInterval(countdownInterval);
+            countdownInterval = setInterval(() => {
+                let m = Math.floor(sec / 60), s = sec % 60;
+                document.getElementById('globalTimer').innerText = `${m}:${s < 10 ? '0'+s : s}`;
+                if(sec-- <= 0) {
+                    clearInterval(countdownInterval);
+                    document.getElementById('countdownBanner').style.display = 'none';
+                    controlGame('PLAY');
+                }
+            }, 1000);
+        }
+
+        // --- Core Game Logic ---
+        const canvas = document.getElementById('wheel'), ctx = canvas.getContext('2d');
+        function drawWheel() {
+            ctx.clearRect(0,0,400,400);
+            const sliceAngle = (2 * Math.PI) / range;
+            const colors = ['#a855f7', '#4ade80', '#fb923c', '#ff4d4d', '#3b82f6'];
+            for (let i = 0; i < range; i++) {
+                ctx.beginPath(); ctx.fillStyle = colors[i % colors.length]; ctx.moveTo(200, 200);
+                ctx.arc(200, 200, 190, i * sliceAngle, (i + 1) * sliceAngle); ctx.fill(); ctx.stroke();
+                ctx.save(); ctx.translate(200, 200); ctx.rotate(i * sliceAngle + sliceAngle / 2);
+                ctx.textAlign = "right"; ctx.fillStyle = "white"; ctx.font = "bold 22px Arial";
+                ctx.fillText(i + 1, 175, 10); ctx.restore();
+            }
+        }
+
+        function createKeypad() {
+            const k = document.getElementById('keypad'); k.innerHTML = "";
+            for (let i = 1; i <= range; i++) {
+                const b = document.createElement('button'); b.className = 'key-btn';
+                b.innerText = i;
+                if(soldNumbers.includes(i)) { b.classList.add('sold'); b.innerText = "✅"; }
+                b.disabled = isSpinning || !gameActive;
+                b.onclick = () => {
+                    if(userWallet >= minBet) {
+                        userWallet -= minBet; soldNumbers.push(i);
+                        updateUI(); createKeypad(); startBetTimer();
+                    }
+                };
+                k.appendChild(b);
+            }
+        }
+
+        function startBetTimer() {
+            if (isSpinning || !gameActive) return;
+            clearInterval(betTimerInterval);
+            let timeLeft = 30;
+            const timerDiv = document.getElementById('betTimer');
+            betTimerInterval = setInterval(() => {
+                timerDiv.innerHTML = `⌛ ${timeLeft}s`;
+                if (timeLeft === 5) { isSpinning = true; createKeypad(); timerDiv.innerHTML = "🔒 CLOSED"; }
+                if (timeLeft-- <= 0) { clearInterval(betTimerInterval); startSpin(); }
+            }, 1000);
+        }
+
+        function startSpin() {
+            if(soldNumbers.length === 0) { isSpinning = false; createKeypad(); return; }
+            isSpinning = true;
+            document.getElementById('spinSound').play();
+            const res = Math.floor(Math.random() * range) + 1;
+            const sliceDeg = 360 / range;
+            const targetRotation = (360 * 10) + (360 - (res - 1) * sliceDeg) - (sliceDeg / 2) - 90;
+            currentRot += targetRotation;
+            canvas.style.transform = `rotate(${currentRot}deg)`;
+
+            setTimeout(() => {
+                const isWin = soldNumbers.includes(res);
+                if(isWin) document.getElementById('winSound').play();
+                tg.showAlert(isWin ? `🎉 INJIFATTEETTA! Lakkofsa: ${res}` : `🎯 Winner: ${res}`);
+                
+                // 5s Delay for Reset
+                setTimeout(() => {
+                    isSpinning = false;
+                    soldNumbers = [];
+                    document.getElementById('betTimer').innerHTML = "READY";
+                    updateUI();
+                    createKeypad();
+                }, 5000);
+            }, 5500);
+        }
+
+        function openDeposit() { document.getElementById('depositModal').style.display = 'block'; }
+        function closeDeposit() { document.getElementById('depositModal').style.display = 'none'; }
+        function copyText(t) { navigator.clipboard.writeText(t); tg.showAlert("Copied!"); }
+
+        updateUI(); drawWheel(); createKeypad();
+    </script>
+</body>
+</html>
